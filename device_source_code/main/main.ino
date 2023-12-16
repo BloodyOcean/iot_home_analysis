@@ -1,11 +1,26 @@
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <DHT.h>    /*  Temperature sensor DHT Library  */
+#include <time.h>   /*  Time setting library  */
+
+#define DHTPIN 5  /*  Arduino pin for DHT sensorn   */
+#define DHTTYPE DHT11   /*  DHT sensor model  */
 
 // Update these with values suitable for your network.
 
-const char* ssid = "ssid_here";
-const char* password = "pass_here";
+const char* ssid = "iPhone (Eduard)";
+const char* password = "borlo123";
 IPAddress mqtt_server(172, 20, 10, 7);
+
+struct Metrics {
+  float  humidity;
+  float  celsius;
+  float  fahrenheit;
+  float  heatIndexCels;
+  float  heatIndexFahr;
+};
+
+DHT dht(DHTPIN, DHTTYPE);   /*  DHT sensor client  */
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -19,6 +34,7 @@ void setup_wifi() {
   delay(10);
   // We start by connecting to a WiFi network
   Serial.println();
+  dht.begin();
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
@@ -91,11 +107,21 @@ void setup() {
 }
 
 void loop() {
+  String payload;
 
   if (!client.connected()) {
     reconnect();
   }
   client.loop();
+
+  struct Metrics *metric = readSensor();
+
+  printResults(metric);
+  delay(1000);
+  
+  if(metric == NULL) return;
+  
+  payload = createPayload(metric);
 
   unsigned long now = millis();
   if (now - lastMsg > 2000) {
@@ -104,6 +130,53 @@ void loop() {
     snprintf (msg, MSG_BUFFER_SIZE, "hello world #%ld", value);
     Serial.print("Publish message: ");
     Serial.println(msg);
-    client.publish("outTopic", msg);
+    client.publish("outTopic", payload.c_str());
   }
+}
+
+struct Metrics * readSensor(){
+
+  struct Metrics *metric = (Metrics*)malloc(sizeof(struct Metrics));
+
+  metric->humidity = dht.readHumidity();
+  metric->celsius = dht.readTemperature();  
+  metric->fahrenheit = dht.readTemperature(true);
+  
+  if (isnan(metric->humidity) || isnan(metric->celsius) || isnan(metric->fahrenheit)) {
+    Serial.println("Failed to read from DHT sensor!");
+    delay(1000); 
+    return NULL;
+  }
+
+  metric->heatIndexFahr = dht.computeHeatIndex(metric->fahrenheit, metric->humidity);
+  metric->heatIndexCels = dht.computeHeatIndex(metric->celsius, metric->humidity, false);
+
+  return metric;
+  
+}
+
+String createPayload(Metrics* metric){
+  
+  String payload = "{\"microsegundos\":";
+  payload += "\"" + (String)micros() + "\"";
+  payload += ",\"fetched\":";
+  payload += ",\"celcius\":";
+  payload += "\"" + (String)metric->celsius + "\"";
+  payload += ",\"fahrenheit\":";
+  payload += "\"" + (String)metric->fahrenheit + "\"";
+  payload += ",\"humidity\":";
+  payload += "\"" + (String)metric->humidity + "\"";
+  payload += ",\"ind_cal_cel\":";
+  payload += "\"" + (String)metric->heatIndexCels + "\"";
+  payload += ",\"ind_cal_far\":";
+  payload += "\"" + (String)metric->heatIndexFahr + "\"";
+  payload += "}";
+
+  return payload;
+}
+
+void printResults(Metrics* metric){
+  Serial.println("Humidity: " + (String)metric->humidity);
+  Serial.println("Temperature: " + (String)metric->celsius + " *C " + (String)metric->fahrenheit +" *F\t");
+  Serial.println("Heat index: " + (String)metric->heatIndexCels + " *C " + (String)metric->heatIndexFahr + " *F");  
 }
