@@ -1,109 +1,109 @@
 #include <ESP8266WiFi.h>
-#include "DHT.h"
+#include <PubSubClient.h>
 
-#define DHTTYPE DHT11
+// Update these with values suitable for your network.
 
-const char* ssid = "<your ssid here>";
-const char* password = "<your password here>";
+const char* ssid = "ssid_here";
+const char* password = "pass_here";
+IPAddress mqtt_server(172, 20, 10, 7);
 
-WiFiServer server(80);
+WiFiClient espClient;
+PubSubClient client(espClient);
+unsigned long lastMsg = 0;
+#define MSG_BUFFER_SIZE  (50)
+char msg[MSG_BUFFER_SIZE];
+int value = 0;
 
-const int DHTPin = 5;
+void setup_wifi() {
 
-DHT dht(DHTPin, DHTTYPE);
-
-static char celsiusTemp[7];
-static char fahrenheitTemp[7];
-static char humidityTemp[7];
-
-void setup() 
-{
-  Serial.begin(115200);
   delay(10);
-  dht.begin();
+  // We start by connecting to a WiFi network
   Serial.println();
   Serial.print("Connecting to ");
   Serial.println(ssid);
 
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
-  while (WiFi.status() != WL_CONNECTED) 
-  {
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
+
+  randomSeed(micros());
+
   Serial.println("");
   Serial.println("WiFi connected");
-
-  server.begin();
-  Serial.println("Web server running. Waiting for the ESP IP...");
-  delay(10000);
-
+  Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
 }
 
-void loop() 
-{
-  WiFiClient client = server.available();
+void callback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
 
-  if (client) 
-  {
-    Serial.println("New client");
-    boolean blank_line = true;
-    while (client.connected()) 
-    {
-      if (client.available()) 
-      {
-        char c = client.read();
-        if (c == '\n' && blank_line) 
-        {
-          float h = dht.readHumidity();
-          float t = dht.readTemperature();
-          float f = dht.readTemperature(true);
-          if (isnan(h) || isnan(t) || isnan(f)) 
-          {
-            Serial.println("Failed to read from DHT sensor!");
-            strcpy(celsiusTemp,"Failed");
-            strcpy(fahrenheitTemp, "Failed");
-            strcpy(humidityTemp, "Failed");
-          }
-          else
-          {
-            float hic = dht.computeHeatIndex(t, h, false);
-            dtostrf(hic, 6, 2, celsiusTemp);
-            float hif = dht.computeHeatIndex(f, h);
-            dtostrf(hif, 6, 2, fahrenheitTemp);
-            dtostrf(h, 6, 2, humidityTemp);
-          }
-          client.println("HTTP/1.1 200 OK");
-          client.println("Content-Type: text/html");
-          client.println("Connection: close");
-          client.println();
+  // Switch on the LED if an 1 was received as first character
+  if ((char)payload[0] == '1') {
+    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
+    // but actually the LED is on; this is because
+    // it is active low on the ESP-01)
+  } else {
+    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
+  }
 
-          client.println("<!DOCTYPE HTML>");
-          client.println("<html>");
-          client.println("<head></head><body><h1>ESP8266 - Temperature and Humidity</h1><h3>Temperature in Celsius: ");
-          client.println(celsiusTemp);
-          client.println("*C</h3><h3>Temperature in Fahrenheit: ");
-          client.println(fahrenheitTemp);
-          client.println("*F</h3><h3>Humidity: ");
-          client.println(humidityTemp);
-          client.println("%</h3><h3>");
-          client.println("</body></html>");
-          break;
-        }
-        if (c == '\n') 
-        {
-          blank_line = true;
-        }
-        else if (c != '\r') 
-        {
-          blank_line = false;
-        }
-      }
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+    // Create a random client ID
+    String clientId = "ESP8266Client-";
+    clientId += String(random(0xffff), HEX);
+    // Attempt to connect
+    if (client.connect(clientId.c_str())) {
+      Serial.println("connected");
+      // Once connected, publish an announcement...
+      client.publish("outTopic", "hello world");
+      // ... and resubscribe
+      client.subscribe("inTopic");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      // Wait 5 seconds before retrying
+      delay(5000);
     }
-    delay(1);
-    client.stop();
-    Serial.println("Client disconnected.");
+  }
+}
+
+void setup() {
+  pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
+  Serial.begin(115200);
+  setup_wifi();
+  client.setServer(mqtt_server, 8883);
+  client.setCallback(callback);
+}
+
+void loop() {
+
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+
+  unsigned long now = millis();
+  if (now - lastMsg > 2000) {
+    lastMsg = now;
+    ++value;
+    snprintf (msg, MSG_BUFFER_SIZE, "hello world #%ld", value);
+    Serial.print("Publish message: ");
+    Serial.println(msg);
+    client.publish("outTopic", msg);
   }
 }
