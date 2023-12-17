@@ -1,26 +1,86 @@
 version: '2'
 services:
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    image: 'bitnami/zookeeper:3.7.0'
+    hostname: myzookeeper
+    restart: on-failure
+    user: root
     environment:
+      ALLOW_ANONYMOUS_LOGIN: 'yes'
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - 22181:2181
-  
+      - 2181:2181
+    networks:
+      - my_persistent_network
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: wurstmeister/kafka
+    container_name: kafka
+    restart: on-failure
+    user: root
     depends_on:
       - zookeeper
     ports:
-      - 29092:29092
+      - 9092:9092
+    networks:
+      - my_persistent_network
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "Topic1:1:1,Topic2:1:1:compact"
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9092,OUTSIDE://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9092,OUTSIDE://0.0.0.0:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_ZOOKEEPER_CONNECT: myzookeeper:2181
+  # version control for nifi flows
+  registry:
+      hostname: myregistry
+      container_name: registry_container_persistent
+      image: 'apache/nifi-registry:1.15.0'  # latest image as of 2021-11-09.
+      restart: on-failure
+      ports:
+          - "18080:18080"
+      environment:
+          - LOG_LEVEL=INFO
+          - NIFI_REGISTRY_DB_DIR=/opt/nifi-registry/nifi-registry-current/database
+          - NIFI_REGISTRY_FLOW_PROVIDER=file
+          - NIFI_REGISTRY_FLOW_STORAGE_DIR=/opt/nifi-registry/nifi-registry-current/flow_storage
+      volumes:
+          - ./nifi_registry/database:/opt/nifi-registry/nifi-registry-current/database
+          - ./nifi_registry/flow_storage:/opt/nifi-registry/nifi-registry-current/flow_storage
+      networks:
+          - my_persistent_network
+  # data extraction, transformation and load service
+  nifi:
+      hostname: mynifi
+      container_name: nifi_container_persistent
+      image: 'apache/nifi:1.14.0'  # latest image as of 2021-11-09.
+      restart: on-failure
+      ports:
+          - '8091:8080'
+      environment:
+          - NIFI_WEB_HTTP_PORT=8080
+          - NIFI_CLUSTER_IS_NODE=true
+          - NIFI_CLUSTER_NODE_PROTOCOL_PORT=8082
+          - NIFI_ZK_CONNECT_STRING=myzookeeper:2181
+          - NIFI_ELECTION_MAX_WAIT=30 sec
+          - NIFI_SENSITIVE_PROPS_KEY='12345678901234567890A'
+      healthcheck:
+          test: "${DOCKER_HEALTHCHECK_TEST:-curl localhost:8091/nifi/}"
+          interval: "60s"
+          timeout: "3s"
+          start_period: "5s"
+          retries: 5
+      volumes:
+          - ./nifi/database_repository:/opt/nifi/nifi-current/database_repository
+          - ./nifi/flowfile_repository:/opt/nifi/nifi-current/flowfile_repository
+          - ./nifi/content_repository:/opt/nifi/nifi-current/content_repository
+          - ./nifi/provenance_repository:/opt/nifi/nifi-current/provenance_repository
+          - ./nifi/state:/opt/nifi/nifi-current/state
+          - ./nifi/logs:/opt/nifi/nifi-current/logs
+          # uncomment the next line after copying the /conf directory from the container to your local directory to persist NiFi flows
+          - ./nifi/conf:/opt/nifi/nifi-current/conf
+      networks:
+          - my_persistent_network
   mqtt5:
     image: eclipse-mosquitto
     hostname: mosquitto
@@ -39,14 +99,20 @@ services:
       - ./mosquitto/log:/mosquitto/log
     networks:
         - webnet
+  kafdrop:
+    image: obsidiandynamics/kafdrop
+    restart: "no"
+    ports:
+      - "9000:9000"
+    environment:
+      KAFKA_BROKERCONNECT: "kafka:9092"
+    depends_on:
+      - "kafka"
+    networks:
+      - my_persistent_network
 
 
 networks:
   webnet:
-
-# volumes:
-#   mosquitto:
-  
-# networks:
-#   default:
-#     name: mqtt5-network
+  my_persistent_network:
+    driver: bridge
