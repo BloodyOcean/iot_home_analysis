@@ -163,6 +163,7 @@ cython_debug/
 mosquitto/log/mosquitto.log  
 
 
+
 hadoop_namenode/*
 hadoop_datanode/*
 hadoop_historyserver/*
