@@ -161,3 +161,8 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 mosquitto/log/mosquitto.log  
+
+
+hadoop_namenode/*
+hadoop_datanode/*
+hadoop_historyserver/*
