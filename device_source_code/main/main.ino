@@ -10,7 +10,7 @@
 
 const char* ssid = "iPhone (Eduard)";
 const char* password = "borlo123";
-IPAddress mqtt_server(172, 20, 10, 7);
+IPAddress mqtt_server(172, 20, 10, 3);
 
 struct Metrics {
   float  humidity;
