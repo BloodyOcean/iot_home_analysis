@@ -12,6 +12,7 @@ This project is created to analyse telemetry from sensors and create real-time d
 7. Compile the code and boot your NodeMCU board
 8. Check logs via docker or serial monitor
 9. For better experience I recommend to use MQTTX client
+10. It is not recommended to use work(commercial) devices
 ## Libraries and dependencies
 1. PubSubClient
 ## Possible issues
@@ -19,16 +20,21 @@ This project is created to analyse telemetry from sensors and create real-time d
 2. Zookeper and Kafka strongly tied by its versions. Please double-check version compatibility.
 3. Double-check all the IP's you declared. Sometimes IP may be differ from original thus nothing will work.
 4. Inspect actual IP addresses via Docker.
+5. Be sure that your firewall allows to connect devices within private local network.
+6. Ensure that you chose mqtt protocol v5.0.
 ## Infrastructure
 1. MQTT broker (Mosquitto)
 2. Apache Kafka
 3. Apache Zookeper
 4. Apache NiFi
 5. Apache Nifi Register
+6. Apache Spark
+7. Apache Hadoop(HDFS)
 ## Monitoring links
 1. [NiFi Registry](http://localhost:18080/nifi-registry/)
 2. [NiFi](http://localhost:8091/nifi/)
 3. [Kafka UI](http://localhost:9000/)
+4. [Spark UI](http://localhost:8083/)
 ## NiFi dataflow overview
 1. NiFi ingests data from mqtt broker 
 ## Useful links
