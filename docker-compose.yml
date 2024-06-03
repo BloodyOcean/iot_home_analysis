@@ -101,7 +101,7 @@ services:
         - webnet
   kafdrop:
     image: obsidiandynamics/kafdrop
-    restart: "no"
+    restart: "always"
     ports:
       - "9000:9000"
     environment:
@@ -157,17 +157,6 @@ services:
     env_file:
       - ./hadoop.env
 
-  historyserver:
-    image: bde2020/hadoop-historyserver:2.0.0-hadoop3.2.1-java8
-    container_name: historyserver
-    restart: always
-    environment:
-      SERVICE_PRECONDITION: "namenode:9000 namenode:9870 datanode:9864 resourcemanager:8088"
-    volumes:
-      - "./hadoop_historyserver:/hadoop/yarn/timeline"
-    env_file:
-      - ./hadoop.env
-
   spark-master:
     image: bde2020/spark-master:3.0.0-hadoop3.2
     container_name: spark-master
@@ -185,22 +174,35 @@ services:
     volumes:
       - "./process_job_lib:/process_job_lib"
 
-  spark-worker-1:
+  spark-worker:
     image: bde2020/spark-worker:3.0.0-hadoop3.2
-    container_name: spark-worker-1
+    container_name: spark-worker
     depends_on:
       - spark-master
     ports:
       - "8081:8081"
+    networks:
+      - my_persistent_network
     environment:
       - "SPARK_MASTER=spark://spark-master:7077"
       - CORE_CONF_fs_defaultFS=hdfs://namenode:9000
-
-  presto-coordinator:
-    image: shawnzhu/prestodb:0.181
-    container_name: presto-coordinator
+  grafana:
+    image: grafana/grafana-enterprise
+    container_name: grafana
+    # restart: unless-stopped
     ports:
-      - "8089:8089"
+     - '3000:3000'
+  timescaledb:
+    image: timescale/timescaledb:latest-pg12
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: timescaledb
+      POSTGRES_PASSWORD: password
+      PGDATA: /var/lib/postgresql/data/
+    volumes:
+      - "./data/timescaledb:/var/lib/postgresql/data/"
 
 
 networks:

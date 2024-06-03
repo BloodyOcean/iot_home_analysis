@@ -1,0 +1,1 @@
+./spark/bin/spark-submit --deploy-mode client --executor-memory 1g --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.0.0,org.apache.kafka:kafka-clients:3.2.3,org.postgresql:postgresql:42.2.18 --py-files ./process_job_lib/process_job.py ./process_job_lib/process_job.py
