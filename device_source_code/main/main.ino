@@ -20,6 +20,8 @@ struct Metrics {
   float  heatIndexFahr;
 };
 
+char timestamp_buff[20]; // declare a character variable that contains time-stamp
+
 DHT dht(DHTPIN, DHTTYPE);   /*  DHT sensor client  */
 
 WiFiClient espClient;
@@ -28,6 +30,8 @@ unsigned long lastMsg = 0;
 #define MSG_BUFFER_SIZE  (50)
 char msg[MSG_BUFFER_SIZE];
 int value = 0;
+
+const int timezone = 3;  /*  Timezone (Ukraine)   */
 
 void setup_wifi() {
 
@@ -52,6 +56,8 @@ void setup_wifi() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+
+  configureTime();
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
@@ -108,6 +114,8 @@ void setup() {
 
 void loop() {
   String payload;
+  
+  time_t tnow = time(nullptr);
 
   if (!client.connected()) {
     reconnect();
@@ -120,10 +128,11 @@ void loop() {
   delay(1000);
   
   if(metric == NULL) return;
-  
-  payload = createPayload(metric);
+  String datetime = buildDateTime(tnow);
+  payload = createPayload(datetime, tnow, metric);
 
   unsigned long now = millis();
+  
   if (now - lastMsg > 2000) {
     lastMsg = now;
     ++value;
@@ -132,6 +141,20 @@ void loop() {
     Serial.println(msg);
     client.publish("outTopic", payload.c_str());
   }
+}
+
+void configureTime(){
+  configTime(timezone * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  Serial.print("\nWaiting for time");
+  
+  while (!time(nullptr)) {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println("");
+  Serial.println("Time configured.");
+  Serial.println("");
+  
 }
 
 struct Metrics * readSensor(){
@@ -155,11 +178,14 @@ struct Metrics * readSensor(){
   
 }
 
-String createPayload(Metrics* metric){
+String createPayload(String datetime, time_t now, Metrics* metric){
   
-  String payload = "{\"microsegundos\":";
+  String payload = "{\"microseconds\":";
   payload += "\"" + (String)micros() + "\"";
   payload += ",\"fetched\":";
+  payload += "\"" + datetime + "\"";
+  payload += ",\"timestamp\":";
+  payload += "\"" + (String)now + "\"";
   payload += ",\"celcius\":";
   payload += "\"" + (String)metric->celsius + "\"";
   payload += ",\"fahrenheit\":";
@@ -173,6 +199,38 @@ String createPayload(Metrics* metric){
   payload += "}";
 
   return payload;
+  
+}
+
+
+String buildDateTime(time_t now){
+  struct tm * timeinfo;
+  timeinfo = localtime(&now);
+  String c_year = (String) (timeinfo->tm_year + 1900);
+  String c_month = "";
+  if (timeinfo->tm_mon + 1 >= 10) {
+    String c_month = (String) (timeinfo->tm_mon + 1);
+  } else {
+    String c_month = (String) (timeinfo->tm_mon + 1);
+  }
+//  String c_month = (String) (timeinfo->tm_mon + 1);
+  String c_day = (String) (timeinfo->tm_mday);
+  String c_hour = (String) (timeinfo->tm_hour);
+  String c_min = (String) (timeinfo->tm_min);
+  String c_sec = (String) (timeinfo->tm_sec);
+  String datetime = c_year + "-" + c_month + "-" + c_day + "T" + c_hour + ":" + c_min + ":" + c_sec;
+  
+  if (timezone < 0){
+    datetime += "-0" + (String)(timezone) + ":00";
+  }else{
+    datetime += "+0" + (String)(timezone) + ":00";
+  }
+//  return datetime;
+
+  sprintf (timestamp_buff, "%4d-%02d-%02d %02d:%02d:%02d", timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+  String str_datetime(timestamp_buff);
+
+  return str_datetime;
 }
 
 void printResults(Metrics* metric){
