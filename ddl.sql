@@ -1,3 +1,7 @@
+-- psql -U timescaledb
+-- \c metrics;
+-- select count(*) from ec1.metrics_iot;
+
 create  database metrics;
 
 create schema IF NOT exists ec1;

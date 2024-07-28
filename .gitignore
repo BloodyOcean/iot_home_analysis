@@ -165,3 +165,5 @@ hadoop_namenode/*
 hadoop_datanode/*
 hadoop_historyserver/*
 data/*
+nifi/content_repository/*
+nifi/logs/*
